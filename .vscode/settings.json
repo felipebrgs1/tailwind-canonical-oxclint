@@ -1,0 +1,22 @@
+{
+  "files.associations": {
+    "*.tsx": "typescriptreact",
+    "*.jsx": "javascriptreact"
+  },
+  "tailwindCSS.classAttributes": [
+    "class",
+    "className",
+    "ngClass",
+    "tw",
+    "twx",
+    "css",
+    "styles"
+  ],
+  "tailwindCSS.experimental.classRegex": [
+    ["cn\\(([^)]*)\\)", "\"([^\"]*)\""],
+    ["clsx\\(([^)]*)\\)", "\"([^\"]*)\""],
+    ["twMerge\\(([^)]*)\\)", "\"([^\"]*)\""],
+    ["classNames\\(([^)]*)\\)", "\"([^\"]*)\""],
+    ["cva\\(([^)]*)\\)", "\"([^\"]*)\""]
+  ]
+}
