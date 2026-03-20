@@ -16,6 +16,33 @@ Detects non-canonical classes like `flex-grow` (should be `grow`), `border-1` (s
 
 ## Installation
 
+### Via GitHub (default)
+
+Add to your `package.json`:
+
+```json
+{
+  "devDependencies": {
+    "oxlint-tailwind-canonical-classes": "github:felipebrgs1/tailwind-canonical-oxclint",
+    "@tailwindcss/node": "^4.0.0"
+  }
+}
+```
+
+Then install:
+
+```bash
+npm install
+```
+
+To pin a specific branch or tag:
+
+```json
+"oxlint-tailwind-canonical-classes": "github:felipebrgs1/tailwind-canonical-oxclint#main"
+```
+
+### Via npm (when published)
+
 ```bash
 npm install -D oxlint-tailwind-canonical-classes @tailwindcss/node
 ```

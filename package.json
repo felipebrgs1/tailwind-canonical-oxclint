@@ -4,6 +4,14 @@
   "description": "Oxlint plugin to enforce canonical Tailwind CSS v4 class names",
   "type": "module",
   "main": "plugin.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/felipebrgs1/tailwind-canonical-oxclint.git"
+  },
+  "homepage": "https://github.com/felipebrgs1/tailwind-canonical-oxclint#readme",
+  "bugs": {
+    "url": "https://github.com/felipebrgs1/tailwind-canonical-oxclint/issues"
+  },
   "files": [
     "plugin.js",
     "worker.js"
