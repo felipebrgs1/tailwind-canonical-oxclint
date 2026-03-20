@@ -1,0 +1,13 @@
+{
+  "jsPlugins": ["./node_modules/oxlint-tailwind-canonical-classes/plugin.js"],
+  "rules": {
+    "tailwind-canonical-classes/canonical": [
+      "warn",
+      {
+        "cssPath": "./src/styles/globals.css",
+        "rootFontSize": 16,
+        "calleeFunctions": ["cn", "clsx", "classNames", "twMerge", "cva"]
+      }
+    ]
+  }
+}

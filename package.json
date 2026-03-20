@@ -1,0 +1,34 @@
+{
+  "name": "oxlint-tailwind-canonical-classes",
+  "version": "0.1.0",
+  "description": "Oxlint plugin to enforce canonical Tailwind CSS v4 class names",
+  "type": "module",
+  "main": "plugin.js",
+  "files": [
+    "plugin.js",
+    "worker.js"
+  ],
+  "scripts": {
+    "test": "node tests/test.js"
+  },
+  "keywords": [
+    "oxlint",
+    "oxc",
+    "tailwindcss",
+    "tailwind",
+    "canonical",
+    "lint",
+    "plugin"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@tailwindcss/node": ">=4.0.0"
+  },
+  "dependencies": {
+    "synckit": "^0.10.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/node": "^4.0.0",
+    "oxlint": ">=1.0.0"
+  }
+}
