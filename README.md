@@ -203,6 +203,7 @@ const html = `<div style="display: flex; border-top: 4px solid #3498db;">
 - Requires Tailwind CSS v4
 - CSS file must be accessible from where oxlint runs
 - Arbitrary value shorthand is limited to spacing (px/rem), percentages, and direct numbers
+- **Vue templates**: Oxlint does not expose the `<template>` AST to JS plugins. Classes in Vue template attributes like `class="..."` or `:class="..."` are **not** detected. Only classes inside `<script>` blocks and `.js`/`.ts` files are processed. For Vue template classes, use the [Tailwind CSS IntelliSense](https://marketplace.visualstudio.com/items?itemName=bradlc.vscode-tailwindcss) VS Code extension, which provides `suggestCanonicalClasses` diagnostics.
 
 ## License
 

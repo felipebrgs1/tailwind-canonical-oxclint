@@ -1,0 +1,12 @@
+{
+  "plugins": ["vue"],
+  "jsPlugins": ["../../plugin.js"],
+  "rules": {
+    "tailwind-canonical-classes/canonical": [
+      "warn",
+      {
+        "cssPath": "./test.css"
+      }
+    ]
+  }
+}
