@@ -28,6 +28,187 @@ function joinClasses(classes) {
   return classes.join(' ');
 }
 
+function extractTemplate(source) {
+  const match = source.match(/<template[^>]*>([\s\S]*?)<\/template>/);
+  if (!match) return null;
+  return {
+    content: match[1],
+    start: match.index + match[0].indexOf(match[1]),
+  };
+}
+
+function getAttributeName(prefix) {
+  if (prefix === 'v-bind:class') return 'v-bind:class';
+  return prefix.replace(/^:/, '');
+}
+
+function extractVueClasses(source, templateContent, templateStart) {
+  const results = [];
+  const classRegex = /(:?class|v-bind:class)\s*=\s*['"]/g;
+  let match;
+
+  while ((match = classRegex.exec(templateContent)) !== null) {
+    const fullMatch = match[0];
+    const prefix = match[1];
+    const quoteChar = fullMatch[fullMatch.length - 1];
+    const attrName = getAttributeName(prefix);
+
+    const valueStartInTemplate = match.index + fullMatch.length;
+    const closeQuoteIndex = templateContent.indexOf(quoteChar, valueStartInTemplate);
+
+    if (closeQuoteIndex === -1) continue;
+
+    const value = templateContent.slice(valueStartInTemplate, closeQuoteIndex);
+    const valueStartInFile = templateStart + valueStartInTemplate;
+    const valueEndInFile = templateStart + closeQuoteIndex + 1;
+
+    if (prefix === 'class') {
+      if (!value.trim()) continue;
+      if (!isLikelyTailwindClasses(value)) continue;
+      results.push({
+        value,
+        attrName,
+        start: valueStartInFile,
+        end: valueEndInFile,
+        quoteChar,
+        isDynamic: false,
+      });
+    } else {
+      const strRegexes = [
+        { regex: /'([^'\\]*(\\.[^'\\]*)*)'/g, quote: "'" },
+        { regex: /"([^"\\]*(\\.[^"\\]*)*)"/g, quote: '"' },
+        { regex: /`([^`\\]*(\\.[^`\\]*)*)`/g, quote: '`' },
+      ];
+
+      for (const { regex: sr, quote: sq } of strRegexes) {
+        let sm;
+        while ((sm = sr.exec(value)) !== null) {
+          const str = sm[1];
+          if (!str.trim()) continue;
+          if (!isLikelyTailwindClasses(str)) continue;
+          const strStartInFile = valueStartInFile + sm.index + sq.length;
+          const strEndInFile = strStartInFile + str.length;
+          results.push({
+            value: str,
+            attrName,
+            start: strStartInFile,
+            end: strEndInFile,
+            quoteChar: sq,
+            isDynamic: true,
+          });
+        }
+      }
+    }
+
+    classRegex.lastIndex = closeQuoteIndex + 1;
+    if (classRegex.lastIndex >= templateContent.length) break;
+  }
+
+  return results;
+}
+
+function processTemplateClasses(extractions, canonicalize, context, sourceText, resolveArbitrary) {
+  for (const ext of extractions) {
+    const classes = splitClasses(ext.value);
+    if (classes.length === 0) continue;
+
+    let canonicalized;
+    try {
+      canonicalized = canonicalize(classes);
+    } catch {
+      continue;
+    }
+
+    const errors = [];
+    for (let i = 0; i < classes.length; i++) {
+      const canonical = canonicalized[i];
+      if (canonical && canonical !== classes[i]) {
+        errors.push({
+          original: classes[i],
+          canonical,
+          index: i,
+        });
+      }
+    }
+
+    if (errors.length > 0) {
+      const fixedClasses = [...classes];
+      for (const error of errors) {
+        fixedClasses[error.index] = error.canonical;
+      }
+      const fixedValue = joinClasses(fixedClasses);
+
+      const replacementText = `${ext.quoteChar}${fixedValue}${ext.quoteChar}`;
+
+      for (let i = 0; i < errors.length; i++) {
+        const error = errors[i];
+        context.report({
+          node: context.sourceCode.ast,
+          message: `Class '${error.original}' should be '${error.canonical}'`,
+          fix:
+            i === 0
+              ? (fixer) =>
+                  fixer.replaceTextRange(
+                    [ext.start, ext.end],
+                    replacementText
+                  )
+              : undefined,
+        });
+      }
+      continue;
+    }
+
+    if (!resolveArbitrary) continue;
+
+    const arbitraryClasses = classes.filter(c => c.includes('[') && c.includes(']'));
+    if (arbitraryClasses.length === 0) continue;
+
+    let resolved;
+    try {
+      resolved = resolveArbitrary(classes);
+    } catch {
+      continue;
+    }
+
+    const arbErrors = [];
+    for (let i = 0; i < classes.length; i++) {
+      if (resolved[i] && resolved[i] !== classes[i]) {
+        arbErrors.push({
+          original: classes[i],
+          shorthand: resolved[i],
+          index: i,
+        });
+      }
+    }
+
+    if (arbErrors.length === 0) continue;
+
+    const fixedClasses = [...classes];
+    for (const error of arbErrors) {
+      fixedClasses[error.index] = error.shorthand;
+    }
+    const fixedValue = joinClasses(fixedClasses);
+
+    const replacementText = `${ext.quoteChar}${fixedValue}${ext.quoteChar}`;
+
+    for (let i = 0; i < arbErrors.length; i++) {
+      const error = arbErrors[i];
+      context.report({
+        node: context.sourceCode.ast,
+        message: `Class '${error.original}' can be written as '${error.shorthand}'`,
+        fix:
+          i === 0
+            ? (fixer) =>
+                fixer.replaceTextRange(
+                  [ext.start, ext.end],
+                  replacementText
+                )
+            : undefined,
+      });
+    }
+  }
+}
+
 function containsCssOrHtml(str) {
   if (/<\s*[a-zA-Z][^>]*>/.test(str)) return true;
   if (/\bstyle\s*=\s*["']/.test(str)) return true;
@@ -507,7 +688,33 @@ const rule = {
 
     const resolveArbitrary = createArbitraryResolver(cssPath, rootFontSize);
 
+    const filename = context.filename ?? context.filepath ?? '';
+    const isVue = filename.endsWith('.vue');
+
     return {
+      Program(node) {
+        if (!isVue) return;
+
+        const sourceText = sourceCode.getText();
+        const template = extractTemplate(sourceText);
+        if (!template) return;
+
+        const extractions = extractVueClasses(
+          sourceText,
+          template.content,
+          template.start
+        );
+        if (extractions.length === 0) return;
+
+        processTemplateClasses(
+          extractions,
+          canonicalize,
+          context,
+          sourceText,
+          resolveArbitrary
+        );
+      },
+
       Literal(node) {
         if (typeof node.value !== 'string') return;
         if (!isLikelyTailwindClasses(node.value)) return;
@@ -551,5 +758,5 @@ const plugin = {
   },
 };
 
-export { containsCssOrHtml, isLikelyTailwindClasses };
+export { containsCssOrHtml, isLikelyTailwindClasses, extractTemplate, extractVueClasses };
 export default plugin;

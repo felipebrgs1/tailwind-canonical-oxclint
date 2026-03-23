@@ -132,6 +132,103 @@ test('package.json has correct fields', () => {
   assert(pkg.peerDependencies['@tailwindcss/node'], 'Should have @tailwindcss/node as peer dep');
 });
 
+console.log('\nChecking Vue template extraction...');
+
+test('exports extractTemplate function', async () => {
+  const plugin = await import(pluginPath);
+  assert(typeof plugin.extractTemplate === 'function', 'Should export extractTemplate');
+});
+
+test('exports extractVueClasses function', async () => {
+  const plugin = await import(pluginPath);
+  assert(typeof plugin.extractVueClasses === 'function', 'Should export extractVueClasses');
+});
+
+test('extractTemplate extracts template content', async () => {
+  const { extractTemplate } = await import(pluginPath);
+  const vue = `<template>\n  <div class="flex-grow">Hi</div>\n</template>\n<script>const x = 1</script>`;
+  const result = extractTemplate(vue);
+  assert(result !== null, 'Should find template');
+  assert(result.content.includes('flex-grow'), 'Should contain template content');
+  assert(result.start > 0, 'Should have positive start offset');
+});
+
+test('extractTemplate returns null for non-Vue files', async () => {
+  const { extractTemplate } = await import(pluginPath);
+  const js = `const x = 1;`;
+  const result = extractTemplate(js);
+  assert(result === null, 'Should return null for JS');
+});
+
+test('extractVueClasses finds static class attributes', async () => {
+  const { extractVueClasses } = await import(pluginPath);
+  const source = `<template>\n  <div class="flex-grow p-4">Hi</div>\n</template>`;
+  const template = extractTemplate(source);
+  const results = extractVueClasses(source, template.content, template.start);
+  assert(results.length >= 1, 'Should find at least one class attribute');
+  assert(results[0].value === 'flex-grow p-4', 'Should extract correct value');
+  assert(results[0].attrName === 'class', 'Should detect class attribute');
+  assert(results[0].isDynamic === false, 'Should be static');
+});
+
+test('extractVueClasses finds :class bindings with string literals', async () => {
+  const { extractVueClasses } = await import(pluginPath);
+  const source = `<template>\n  <button :class="isActive ? 'flex-grow' : 'shrink-0'">\n</template>`;
+  const template = extractTemplate(source);
+  const results = extractVueClasses(source, template.content, template.start);
+  assert(results.length === 2, 'Should find two string literals from :class');
+  const values = results.map(r => r.value);
+  assert(values.includes('flex-grow'), 'Should find flex-grow');
+  assert(values.includes('shrink-0'), 'Should find shrink-0');
+  assert(results[0].isDynamic === true, 'Should be dynamic');
+});
+
+test('extractVueClasses finds v-bind:class bindings', async () => {
+  const { extractVueClasses } = await import(pluginPath);
+  const source = `<template>\n  <a v-bind:class="'hover:flex-grow'">\n</template>`;
+  const template = extractTemplate(source);
+  const results = extractVueClasses(source, template.content, template.start);
+  assert(results.length === 1, 'Should find one string literal from v-bind:class');
+  assert(results[0].value === 'hover:flex-grow', 'Should extract correct value');
+  assert(results[0].attrName === 'v-bind:class', 'Should detect v-bind:class');
+});
+
+test('extractVueClasses skips non-Tailwind class values', async () => {
+  const { extractVueClasses } = await import(pluginPath);
+  const source = `<template>\n  <div class="my-custom-class">Hi</div>\n</template>`;
+  const template = extractTemplate(source);
+  const results = extractVueClasses(source, template.content, template.start);
+  assert(results.length === 0, 'Should skip non-Tailwind classes');
+});
+
+test('extractVueClasses handles multiple class attributes', async () => {
+  const { extractVueClasses } = await import(pluginPath);
+  const source = `<template>\n  <div class="flex-grow">\n    <span class="bg-gradient-to-r">\n  </div>\n</template>`;
+  const template = extractTemplate(source);
+  const results = extractVueClasses(source, template.content, template.start);
+  assert(results.length === 2, 'Should find two class attributes');
+  const values = results.map(r => r.value);
+  assert(values.includes('flex-grow'), 'Should find flex-grow');
+  assert(values.includes('bg-gradient-to-r'), 'Should find bg-gradient-to-r');
+});
+
+test('extractVueClasses computes correct file positions', async () => {
+  const { extractVueClasses } = await import(pluginPath);
+  const source = `<template>\n  <div class="flex-grow">Hi</div>\n</template>`;
+  const template = extractTemplate(source);
+  const results = extractVueClasses(source, template.content, template.start);
+  assert(results.length === 1, 'Should find one class');
+  const ext = results[0];
+  const extractedValue = source.slice(ext.start, ext.end - 1);
+  assert(extractedValue === 'flex-grow', `Extracted value should match: got "${extractedValue}"`);
+  const withQuotes = source.slice(ext.start - 1, ext.end);
+  assert(withQuotes === '"flex-grow"', `With quotes should match: got "${withQuotes}"`);
+});
+
+test('Vue test fixture file exists', () => {
+  assert(fs.existsSync(path.resolve(__dirname, 'fixtures/test.vue')), 'test.vue fixture should exist');
+});
+
 console.log('\n========================================');
 console.log(`Results: ${passed} passed, ${failed} failed`);
 console.log('========================================\n');

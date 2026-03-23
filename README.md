@@ -11,6 +11,7 @@ Detects non-canonical classes like `flex-grow` (should be `grow`), `bg-gradient-
 - **String literals**: Detects classes in any string literal
 - **Template literals**: Detects classes in static template literals
 - **JSX support**: Detects classes in `className`, `class`, and other attribute names
+- **Vue template support**: Detects classes in `class="..."`, `:class="..."`, and `v-bind:class="..."` in Vue SFC templates
 - **Utility functions**: Supports `cn()`, `clsx()`, `classNames()`, `twMerge()`, `cva()`, and more
 - **Arbitrary values → shorthand**: Detects `p-[16px]` → `p-4`, `-left-[9px]` → `-left-2.25`, `w-[50%]` → `w-1/2`
 - **Smart CSS/HTML filtering**: Ignores inline CSS in template literals (no false positives on `style="..."` HTML strings)
@@ -165,6 +166,22 @@ const className = `grow p-4`;
 <div className="grow p-4 w-1/2" />
 ```
 
+### Vue templates
+
+```vue
+<template>
+  <!-- Before -->
+  <div class="flex-grow bg-gradient-to-r p-[16px]">
+  <button :class="isActive ? 'flex-grow' : 'shrink-0'">
+</template>
+
+<!-- After auto-fix -->
+<template>
+  <div class="grow bg-linear-to-r p-4">
+  <button :class="isActive ? 'grow' : 'shrink-0'">
+</template>
+```
+
 ### Utility functions
 
 ```js
@@ -203,7 +220,8 @@ const html = `<div style="display: flex; border-top: 4px solid #3498db;">
 - Requires Tailwind CSS v4
 - CSS file must be accessible from where oxlint runs
 - Arbitrary value shorthand is limited to spacing (px/rem), percentages, and direct numbers
-- **Vue templates**: Oxlint does not expose the `<template>` AST to JS plugins. Classes in Vue template attributes like `class="..."` or `:class="..."` are **not** detected. Only classes inside `<script>` blocks and `.js`/`.ts` files are processed. For Vue template classes, use the [Tailwind CSS IntelliSense](https://marketplace.visualstudio.com/items?itemName=bradlc.vscode-tailwindcss) VS Code extension, which provides `suggestCanonicalClasses` diagnostics.
+- **Vue `:class` dynamic bindings**: Only string literals inside `:class` expressions are detected (e.g., `:class="isActive ? 'flex-grow' : 'hidden'"`). Complex dynamic expressions like object syntax (`:class="{ 'flex-grow': isActive }"`) or array syntax (`:class="['flex-grow', conditionalClass]`) are not processed.
+- **Vue projects**: Run with `npx oxlint --vue-plugin --fix` to ensure `.vue` files are parsed.
 
 ## License
 
