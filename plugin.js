@@ -28,9 +28,20 @@ function joinClasses(classes) {
   return classes.join(' ');
 }
 
+function containsCssOrHtml(str) {
+  if (/<\s*[a-zA-Z][^>]*>/.test(str)) return true;
+  if (/\bstyle\s*=\s*["']/.test(str)) return true;
+  if (/<\/[a-zA-Z]/.test(str)) return true;
+  if (/<style\b/i.test(str)) return true;
+  if (/\w[\w-]*:\s+[\w#]/.test(str)) return true;
+  return false;
+}
+
 function isLikelyTailwindClasses(str) {
   const trimmed = str.trim();
   if (!trimmed || trimmed.length < 2) return false;
+
+  if (containsCssOrHtml(trimmed)) return false;
 
   const twPrefixes = [
     'p-', 'm-', 'w-', 'h-', 'text-', 'bg-', 'border-',
@@ -112,6 +123,7 @@ function extractStringLiterals(node, sourceCode) {
     }
   } else if (node.type === 'TemplateLiteral' && node.expressions.length === 0) {
     const value = node.quasis.map(q => q.value.cooked).join('');
+    if (containsCssOrHtml(value)) return results;
     if (isLikelyTailwindClasses(value)) {
       results.push({
         value,
@@ -462,4 +474,5 @@ const plugin = {
   },
 };
 
+export { containsCssOrHtml, isLikelyTailwindClasses };
 export default plugin;
