@@ -192,8 +192,72 @@ for (const tc of testCases) {
 
 console.log('\n========================================');
 console.log(`${passed} passed, ${failed} failed / ${testCases.length} total`);
-console.log('========================================\n');
+console.log('========================================');
 
 if (failed > 0) {
+  process.exit(1);
+}
+
+// ===== Arbitrary value → shorthand tests =====
+console.log('\nTesting arbitrary value → shorthand resolution...\n');
+
+const resolveCases = [
+  // Pixel spacing → Tailwind scale
+  { name: '-left-[9px] → -left-2.25', input: ['-left-[9px]'], expected: ['-left-2.25'] },
+  { name: 'p-[16px] → p-4', input: ['p-[16px]'], expected: ['p-4'] },
+  { name: 'm-[8px] → m-2', input: ['m-[8px]'], expected: ['m-2'] },
+  { name: 'w-[32px] → w-8', input: ['w-[32px]'], expected: ['w-8'] },
+  { name: 'h-[48px] → h-12', input: ['h-[48px]'], expected: ['h-12'] },
+  { name: 'gap-[4px] → gap-1', input: ['gap-[4px]'], expected: ['gap-1'] },
+  { name: '-mt-[16px] → -mt-4', input: ['-mt-[16px]'], expected: ['-mt-4'] },
+
+  // Rem values
+  { name: 'p-[1rem] → p-4', input: ['p-[1rem]'], expected: ['p-4'] },
+  { name: 'm-[0.5rem] → m-2', input: ['m-[0.5rem]'], expected: ['m-2'] },
+  { name: 'p-[2rem] → p-8', input: ['p-[2rem]'], expected: ['p-8'] },
+
+  // Non-standard spacing (fractional scale)
+  { name: 'p-[4.5px] → p-1.125', input: ['p-[4.5px]'], expected: ['p-1.125'] },
+
+  // Already canonical (no change needed)
+  { name: 'p-4 stays', input: ['p-4'], expected: [null] },
+  { name: 'flex stays', input: ['flex'], expected: [null] },
+
+  // Non-integer spacing (valid Tailwind v4 shorthand)
+  { name: 'left-[13px] → left-3.25', input: ['left-[13px]'], expected: ['left-3.25'] },
+
+  // Percentage → fraction
+  { name: 'w-[50%] → w-1/2', input: ['w-[50%]'], expected: ['w-1/2'] },
+  { name: 'w-[25%] → w-1/4', input: ['w-[25%]'], expected: ['w-1/4'] },
+];
+
+let resolvePassed = 0;
+let resolveFailed = 0;
+
+for (const tc of resolveCases) {
+  try {
+    const result = canonicalizeSync(cssPath, tc.input, { rem: 16, mode: 'resolve-arbitrary' });
+    const ok = result.length === tc.expected.length && result.every((v, i) => v === tc.expected[i]);
+    if (ok) {
+      console.log(`  ✓ ${tc.name}`);
+      resolvePassed++;
+    } else {
+      console.log(`  ✗ ${tc.name}`);
+      console.log(`    IN:       ${tc.input.map(s => JSON.stringify(s)).join(' | ')}`);
+      console.log(`    EXPECTED: ${tc.expected.map(s => JSON.stringify(s)).join(' | ')}`);
+      console.log(`    GOT:      ${result.map(s => JSON.stringify(s)).join(' | ')}`);
+      resolveFailed++;
+    }
+  } catch (error) {
+    console.log(`  ✗ ${tc.name} (error: ${error.message})`);
+    resolveFailed++;
+  }
+}
+
+console.log('\n========================================');
+console.log(`${resolvePassed} passed, ${resolveFailed} failed / ${resolveCases.length} total (arbitrary values)`);
+console.log('========================================\n');
+
+if (resolveFailed > 0) {
   process.exit(1);
 }

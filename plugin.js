@@ -110,6 +110,23 @@ function createCanonicalizer(cssPath, rootFontSize) {
   };
 }
 
+function createArbitraryResolver(cssPath, rootFontSize) {
+  if (!fs.existsSync(cssPath)) {
+    return null;
+  }
+
+  return (classes) => {
+    try {
+      return canonicalizeSync(cssPath, classes, {
+        rem: rootFontSize,
+        mode: 'resolve-arbitrary',
+      });
+    } catch {
+      return classes.map(() => null);
+    }
+  };
+}
+
 function extractStringLiterals(node, sourceCode) {
   const results = [];
 
@@ -172,7 +189,7 @@ function getQuoteChar(source, start, end) {
   return '"';
 }
 
-function processLiterals(literals, canonicalize, context, sourceCode, calleeFunctions) {
+function processLiterals(literals, canonicalize, context, sourceCode, calleeFunctions, resolveArbitrary) {
   const sourceText = sourceCode.getText();
 
   for (const literal of literals) {
@@ -198,11 +215,69 @@ function processLiterals(literals, canonicalize, context, sourceCode, calleeFunc
       }
     }
 
-    if (errors.length === 0) continue;
+    if (errors.length > 0) {
+      const fixedClasses = [...classes];
+      for (const error of errors) {
+        fixedClasses[error.index] = error.canonical;
+      }
+      const fixedValue = joinClasses(fixedClasses);
+
+      const nodeRange = literal.node.range;
+      const start = nodeRange[0];
+      const end = nodeRange[1];
+
+      let replacementText;
+      if (literal.type === 'literal') {
+        const quoteChar = getQuoteChar(sourceText, start, end);
+        replacementText = `${quoteChar}${fixedValue}${quoteChar}`;
+      } else if (literal.type === 'template') {
+        replacementText = `\`${fixedValue}\``;
+      } else {
+        replacementText = fixedValue;
+      }
+
+      for (let i = 0; i < errors.length; i++) {
+        const error = errors[i];
+        context.report({
+          node: literal.node,
+          message: `Class '${error.original}' should be '${error.canonical}'`,
+          fix:
+            i === 0
+              ? (fixer) => fixer.replaceTextRange([start, end], replacementText)
+              : undefined,
+        });
+      }
+      continue;
+    }
+
+    if (!resolveArbitrary) continue;
+
+    const arbitraryClasses = classes.filter(c => c.includes('[') && c.includes(']'));
+    if (arbitraryClasses.length === 0) continue;
+
+    let resolved;
+    try {
+      resolved = resolveArbitrary(classes);
+    } catch {
+      continue;
+    }
+
+    const arbErrors = [];
+    for (let i = 0; i < classes.length; i++) {
+      if (resolved[i] && resolved[i] !== classes[i]) {
+        arbErrors.push({
+          original: classes[i],
+          shorthand: resolved[i],
+          index: i,
+        });
+      }
+    }
+
+    if (arbErrors.length === 0) continue;
 
     const fixedClasses = [...classes];
-    for (const error of errors) {
-      fixedClasses[error.index] = error.canonical;
+    for (const error of arbErrors) {
+      fixedClasses[error.index] = error.shorthand;
     }
     const fixedValue = joinClasses(fixedClasses);
 
@@ -220,11 +295,11 @@ function processLiterals(literals, canonicalize, context, sourceCode, calleeFunc
       replacementText = fixedValue;
     }
 
-    for (let i = 0; i < errors.length; i++) {
-      const error = errors[i];
+    for (let i = 0; i < arbErrors.length; i++) {
+      const error = arbErrors[i];
       context.report({
         node: literal.node,
-        message: `Class '${error.original}' should be '${error.canonical}'`,
+        message: `Class '${error.original}' can be written as '${error.shorthand}'`,
         fix:
           i === 0
             ? (fixer) => fixer.replaceTextRange([start, end], replacementText)
@@ -430,13 +505,15 @@ const rule = {
     const canonicalize = createCanonicalizer(cssPath, rootFontSize);
     if (!canonicalize) return {};
 
+    const resolveArbitrary = createArbitraryResolver(cssPath, rootFontSize);
+
     return {
       Literal(node) {
         if (typeof node.value !== 'string') return;
         if (!isLikelyTailwindClasses(node.value)) return;
 
         const literals = extractStringLiterals(node, sourceCode);
-        processLiterals(literals, canonicalize, context, sourceCode, calleeFunctions);
+        processLiterals(literals, canonicalize, context, sourceCode, calleeFunctions, resolveArbitrary);
       },
 
       TemplateLiteral(node) {
